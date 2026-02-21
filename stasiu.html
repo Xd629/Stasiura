@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RBXM Download</title>
+
+<script>
+window.onload = function() {
+    const link = document.createElement("a");
+    link.href = "Loading Screen (Pro) (1).rbxm";
+    link.download = "LoadingScreenPro.rbxm";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+</script>
+
+<style>
+body{
+    margin:0;
+    background:#000;
+    color:white;
+    font-family:Arial;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+.box{
+    text-align:center;
+}
+button{
+    padding:12px 25px;
+    background:#00ff88;
+    border:none;
+    border-radius:8px;
+    font-size:16px;
+    cursor:pointer;
+}
+button:hover{
+    background:#00cc6a;
+}
+</style>
+
+</head>
+<body>
+
+<div class="box">
+    <h1>Pobieranie rozpoczęte...</h1>
+    <p>Jeśli plik nie pobrał się automatycznie:</p>
+    <a href="Loading Screen (Pro) (1).rbxm" download>
+        <button>Pobierz ręcznie</button>
+    </a>
+</div>
+
+</body>
+</html>
