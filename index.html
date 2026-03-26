@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Account Action</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Firebase (modern SDK) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth,
+      verifyPasswordResetCode,
+      confirmPasswordReset,
+      applyActionCode
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    // 🔴 TU WSTAW SWOJE DANE
+    const firebaseConfig = {
+      apiKey: "AIzaSyBDstk_UwkFTGqQyiehAXjMvnElxclxaII",
+      authDomain: "rbxmhub.firebaseapp.com",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode");
+    const oobCode = params.get("oobCode");
+
+    const title = document.getElementById("title");
+    const desc = document.getElementById("desc");
+    const form = document.getElementById("form");
+    const input = document.getElementById("password");
+    const button = document.getElementById("btn");
+
+    async function init() {
+      if (!mode || !oobCode) {
+        title.innerText = "Invalid Link";
+        desc.innerText = "This link is broken or expired.";
+        return;
+      }
+
+      if (mode === "resetPassword") {
+        title.innerText = "Reset your password";
+
+        try {
+          await verifyPasswordResetCode(auth, oobCode);
+          form.style.display = "block";
+
+          button.onclick = async () => {
+            const newPassword = input.value;
+
+            if (newPassword.length < 6) {
+              alert("Password must be at least 6 characters.");
+              return;
+            }
+
+            button.innerText = "Processing...";
+
+            try {
+              await confirmPasswordReset(auth, oobCode, newPassword);
+              title.innerText = "Success!";
+              desc.innerText = "Your password has been reset.";
+              form.style.display = "none";
+            } catch (err) {
+              title.innerText = "Error";
+              desc.innerText = err.message;
+            }
+          };
+
+        } catch (err) {
+          title.innerText = "Invalid or expired code";
+          desc.innerText = err.message;
+        }
+      }
+
+      if (mode === "verifyEmail") {
+        title.innerText = "Verifying email...";
+
+        try {
+          await applyActionCode(auth, oobCode);
+          title.innerText = "Email verified!";
+          desc.innerText = "Your email has been successfully verified.";
+        } catch (err) {
+          title.innerText = "Error";
+          desc.innerText = err.message;
+        }
+      }
+    }
+
+    window.onload = init;
+  </script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 40px;
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+      box-shadow: 0 0 40px rgba(0,0,0,0.5);
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    p {
+      opacity: 0.8;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      margin-top: 15px;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      margin-top: 15px;
+      font-size: 16px;
+      background: #3b82f6;
+      color: white;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      background: #2563eb;
+    }
+
+    #form {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1 id="title">Loading...</h1>
+    <p id="desc">Please wait...</p>
+
+    <div id="form">
+      <input type="password" id="password" placeholder="New password">
+      <button id="btn">Reset Password</button>
+    </div>
+  </div>
+</body>
+</html>
