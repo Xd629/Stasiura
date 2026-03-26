@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Account Action</title>
+<title>Secure Account Action</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <script type="module">
@@ -11,11 +11,9 @@ import {
   getAuth,
   verifyPasswordResetCode,
   confirmPasswordReset,
-  applyActionCode,
-  checkActionCode
+  applyActionCode
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// 🔴 CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyBDstk_UwkFTGqQyiehAXjMvnElxclxaII",
   authDomain: "rbxmhub.firebaseapp.com",
@@ -24,136 +22,77 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// URL params
-const params = new URLSearchParams(window.location.search);
+const params = new URLSearchParams(location.search);
 const mode = params.get("mode");
 const oobCode = params.get("oobCode");
 
-// UI
 const title = document.getElementById("title");
 const desc = document.getElementById("desc");
 const form = document.getElementById("form");
-const password = document.getElementById("password");
-const password2 = document.getElementById("password2");
 const btn = document.getElementById("btn");
-const strength = document.getElementById("strength");
-const toggle = document.getElementById("toggle");
-const statusBox = document.getElementById("status");
+const pass = document.getElementById("pass");
+const pass2 = document.getElementById("pass2");
+const status = document.getElementById("status");
+const loading = document.getElementById("loading");
 
-// utils
-function setStatus(type, msg) {
-  statusBox.className = "status " + type;
-  statusBox.innerText = msg;
+function setStatus(text, ok=false) {
+  status.innerText = text;
+  status.className = ok ? "status ok" : "status";
 }
 
-function validatePassword(pw) {
-  return /^(?=.*[A-Z])(?=.*\d).{6,}$/.test(pw);
-}
-
-function passwordStrength(pw) {
-  let score = 0;
-  if (pw.length > 5) score++;
-  if (pw.match(/[A-Z]/)) score++;
-  if (pw.match(/\d/)) score++;
-  if (pw.length > 10) score++;
-  return score;
-}
-
-password?.addEventListener("input", () => {
-  const s = passwordStrength(password.value);
-  strength.value = s;
-});
-
-// toggle password
-toggle?.addEventListener("click", () => {
-  password.type = password.type === "password" ? "text" : "password";
-});
-
-// MAIN
 async function init() {
   if (!mode || !oobCode) {
     title.innerText = "Invalid link";
-    setStatus("error", "Missing parameters.");
+    setStatus("Missing or broken link.");
+    loading.style.display = "none";
     return;
   }
 
-  // RESET PASSWORD
   if (mode === "resetPassword") {
     title.innerText = "Reset Password";
-    desc.innerText = "Enter a new password below.";
+    desc.innerText = "Create a new secure password";
 
     try {
       await verifyPasswordResetCode(auth, oobCode);
+      loading.style.display = "none";
       form.style.display = "block";
 
       btn.onclick = async () => {
-        const pw = password.value;
-        const pw2 = password2.value;
-
-        if (!validatePassword(pw)) {
-          setStatus("error", "Weak password (min 6 chars, 1 uppercase, 1 number)");
+        if (pass.value !== pass2.value) {
+          setStatus("Passwords do not match");
           return;
         }
 
-        if (pw !== pw2) {
-          setStatus("error", "Passwords do not match");
-          return;
-        }
-
-        btn.disabled = true;
-        btn.innerText = "Processing...";
+        btn.classList.add("loading");
 
         try {
-          await confirmPasswordReset(auth, oobCode, pw);
-          setStatus("success", "Password reset successful!");
+          await confirmPasswordReset(auth, oobCode, pass.value);
+          setStatus("Password updated successfully!", true);
           form.style.display = "none";
-
-          setTimeout(() => {
-            window.location.href = "/";
-          }, 2000);
-
-        } catch (e) {
-          setStatus("error", e.message);
+        } catch(e) {
+          setStatus(e.message);
         }
 
-        btn.disabled = false;
-        btn.innerText = "Reset Password";
+        btn.classList.remove("loading");
       };
 
-    } catch (e) {
-      setStatus("error", "Invalid or expired link.");
+    } catch(e) {
+      loading.style.display = "none";
+      setStatus("This link has expired or is invalid.");
     }
   }
 
-  // VERIFY EMAIL
   if (mode === "verifyEmail") {
-    title.innerText = "Verifying email...";
+    title.innerText = "Verifying your email";
+    desc.innerText = "Almost done";
 
     try {
       await applyActionCode(auth, oobCode);
-      setStatus("success", "Email verified successfully!");
-
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 2000);
-
-    } catch (e) {
-      setStatus("error", e.message);
-    }
-  }
-
-  // RECOVER EMAIL
-  if (mode === "recoverEmail") {
-    title.innerText = "Recover Email";
-
-    try {
-      const info = await checkActionCode(auth, oobCode);
-      await applyActionCode(auth, oobCode);
-
-      setStatus("success", "Email restored: " + info.data.email);
-
-    } catch (e) {
-      setStatus("error", e.message);
+      loading.style.display = "none";
+      setStatus("Email successfully verified!", true);
+    } catch(e) {
+      loading.style.display = "none";
+      setStatus(e.message);
     }
   }
 }
@@ -162,85 +101,149 @@ window.onload = init;
 </script>
 
 <style>
-body {
+*{box-sizing:border-box}
+
+body{
   margin:0;
-  font-family:system-ui;
-  background: radial-gradient(circle at top, #1e293b, #020617);
-  color:white;
+  font-family:Inter, sans-serif;
+  background: radial-gradient(circle at top, #0f172a, #020617);
+  height:100vh;
   display:flex;
   align-items:center;
   justify-content:center;
-  height:100vh;
+  color:white;
 }
 
-.card {
-  width:400px;
-  padding:30px;
-  border-radius:20px;
+/* glow */
+body::before{
+  content:"";
+  position:absolute;
+  width:600px;
+  height:600px;
+  background:#3b82f6;
+  filter:blur(180px);
+  opacity:0.3;
+  top:-200px;
+}
+
+.card{
+  width:380px;
+  padding:35px;
+  border-radius:24px;
   background:rgba(255,255,255,0.05);
   backdrop-filter:blur(25px);
-  box-shadow:0 0 50px rgba(0,0,0,0.6);
+  box-shadow:0 0 60px rgba(0,0,0,0.6);
+  animation:fadeIn 0.6s ease;
 }
 
-h1 {margin:0 0 10px;}
-p {opacity:0.7;}
-
-input {
-  width:100%;
-  padding:12px;
-  margin-top:10px;
-  border-radius:10px;
-  border:none;
+@keyframes fadeIn{
+  from{opacity:0; transform:translateY(20px)}
+  to{opacity:1}
 }
 
-button {
+h1{
+  margin:0;
+  font-size:26px;
+}
+
+p{
+  margin-top:8px;
+  opacity:0.6;
+}
+
+input{
   width:100%;
   padding:12px;
-  margin-top:10px;
+  margin-top:12px;
+  border-radius:12px;
   border:none;
-  border-radius:10px;
-  background:#3b82f6;
+  background:rgba(255,255,255,0.08);
   color:white;
+}
+
+button{
+  width:100%;
+  padding:12px;
+  margin-top:15px;
+  border:none;
+  border-radius:12px;
+  background:linear-gradient(135deg,#3b82f6,#2563eb);
+  color:white;
+  font-weight:600;
   cursor:pointer;
 }
 
-button:disabled {
-  opacity:0.5;
-  cursor:not-allowed;
+button.loading{
+  opacity:0.6;
+  pointer-events:none;
 }
 
-.status {
+/* 🔥 DISCORD-STYLE DOTS */
+.dots{
+  display:inline-flex;
+  gap:5px;
+  margin-left:6px;
+}
+
+.dots span{
+  width:6px;
+  height:6px;
+  background:#60a5fa;
+  border-radius:50%;
+  animation:bounce 1.2s infinite ease-in-out;
+}
+
+.dots span:nth-child(2){animation-delay:0.2s}
+.dots span:nth-child(3){animation-delay:0.4s}
+
+@keyframes bounce{
+  0%,80%,100%{transform:scale(0.6); opacity:0.5;}
+  40%{transform:scale(1); opacity:1;}
+}
+
+.status{
   margin-top:15px;
-  padding:10px;
-  border-radius:10px;
+  font-size:13px;
 }
 
-.status.success {background:#065f46;}
-.status.error {background:#7f1d1d;}
-
-meter {
-  width:100%;
-  margin-top:10px;
+.status.ok{
+  color:#22c55e;
 }
 
-#form {display:none;}
+#form{display:none;}
+
+.loader{
+  margin-top:15px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 </style>
 </head>
 
 <body>
+
 <div class="card">
-  <h1 id="title">Loading...</h1>
-  <p id="desc">Please wait...</p>
+  <h1 id="title">Processing</h1>
+  <p id="desc">
+    Please wait
+    <span class="dots">
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>
+  </p>
+
+  <div id="loading" class="loader"></div>
 
   <div id="form">
-    <input type="password" id="password" placeholder="New password">
-    <input type="password" id="password2" placeholder="Confirm password">
-    <button id="toggle">Show / Hide</button>
-    <meter id="strength" min="0" max="4"></meter>
-    <button id="btn">Reset Password</button>
+    <input type="password" id="pass" placeholder="New password">
+    <input type="password" id="pass2" placeholder="Confirm password">
+    <button id="btn">Update Password</button>
   </div>
 
   <div id="status" class="status"></div>
 </div>
+
 </body>
 </html>
