@@ -1,169 +1,246 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Account Action</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Account Action</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Firebase (modern SDK) -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getAuth,
-      verifyPasswordResetCode,
-      confirmPasswordReset,
-      applyActionCode
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth,
+  verifyPasswordResetCode,
+  confirmPasswordReset,
+  applyActionCode,
+  checkActionCode
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // 🔴 TU WSTAW SWOJE DANE
-    const firebaseConfig = {
-      apiKey: "AIzaSyBDstk_UwkFTGqQyiehAXjMvnElxclxaII",
-      authDomain: "rbxmhub.firebaseapp.com",
-    };
+// 🔴 CONFIG
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+};
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
-    const params = new URLSearchParams(window.location.search);
-    const mode = params.get("mode");
-    const oobCode = params.get("oobCode");
+// URL params
+const params = new URLSearchParams(window.location.search);
+const mode = params.get("mode");
+const oobCode = params.get("oobCode");
 
-    const title = document.getElementById("title");
-    const desc = document.getElementById("desc");
-    const form = document.getElementById("form");
-    const input = document.getElementById("password");
-    const button = document.getElementById("btn");
+// UI
+const title = document.getElementById("title");
+const desc = document.getElementById("desc");
+const form = document.getElementById("form");
+const password = document.getElementById("password");
+const password2 = document.getElementById("password2");
+const btn = document.getElementById("btn");
+const strength = document.getElementById("strength");
+const toggle = document.getElementById("toggle");
+const statusBox = document.getElementById("status");
 
-    async function init() {
-      if (!mode || !oobCode) {
-        title.innerText = "Invalid Link";
-        desc.innerText = "This link is broken or expired.";
-        return;
-      }
+// utils
+function setStatus(type, msg) {
+  statusBox.className = "status " + type;
+  statusBox.innerText = msg;
+}
 
-      if (mode === "resetPassword") {
-        title.innerText = "Reset your password";
+function validatePassword(pw) {
+  return /^(?=.*[A-Z])(?=.*\d).{6,}$/.test(pw);
+}
+
+function passwordStrength(pw) {
+  let score = 0;
+  if (pw.length > 5) score++;
+  if (pw.match(/[A-Z]/)) score++;
+  if (pw.match(/\d/)) score++;
+  if (pw.length > 10) score++;
+  return score;
+}
+
+password?.addEventListener("input", () => {
+  const s = passwordStrength(password.value);
+  strength.value = s;
+});
+
+// toggle password
+toggle?.addEventListener("click", () => {
+  password.type = password.type === "password" ? "text" : "password";
+});
+
+// MAIN
+async function init() {
+  if (!mode || !oobCode) {
+    title.innerText = "Invalid link";
+    setStatus("error", "Missing parameters.");
+    return;
+  }
+
+  // RESET PASSWORD
+  if (mode === "resetPassword") {
+    title.innerText = "Reset Password";
+    desc.innerText = "Enter a new password below.";
+
+    try {
+      await verifyPasswordResetCode(auth, oobCode);
+      form.style.display = "block";
+
+      btn.onclick = async () => {
+        const pw = password.value;
+        const pw2 = password2.value;
+
+        if (!validatePassword(pw)) {
+          setStatus("error", "Weak password (min 6 chars, 1 uppercase, 1 number)");
+          return;
+        }
+
+        if (pw !== pw2) {
+          setStatus("error", "Passwords do not match");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerText = "Processing...";
 
         try {
-          await verifyPasswordResetCode(auth, oobCode);
-          form.style.display = "block";
+          await confirmPasswordReset(auth, oobCode, pw);
+          setStatus("success", "Password reset successful!");
+          form.style.display = "none";
 
-          button.onclick = async () => {
-            const newPassword = input.value;
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 2000);
 
-            if (newPassword.length < 6) {
-              alert("Password must be at least 6 characters.");
-              return;
-            }
-
-            button.innerText = "Processing...";
-
-            try {
-              await confirmPasswordReset(auth, oobCode, newPassword);
-              title.innerText = "Success!";
-              desc.innerText = "Your password has been reset.";
-              form.style.display = "none";
-            } catch (err) {
-              title.innerText = "Error";
-              desc.innerText = err.message;
-            }
-          };
-
-        } catch (err) {
-          title.innerText = "Invalid or expired code";
-          desc.innerText = err.message;
+        } catch (e) {
+          setStatus("error", e.message);
         }
-      }
 
-      if (mode === "verifyEmail") {
-        title.innerText = "Verifying email...";
+        btn.disabled = false;
+        btn.innerText = "Reset Password";
+      };
 
-        try {
-          await applyActionCode(auth, oobCode);
-          title.innerText = "Email verified!";
-          desc.innerText = "Your email has been successfully verified.";
-        } catch (err) {
-          title.innerText = "Error";
-          desc.innerText = err.message;
-        }
-      }
+    } catch (e) {
+      setStatus("error", "Invalid or expired link.");
     }
+  }
 
-    window.onload = init;
-  </script>
+  // VERIFY EMAIL
+  if (mode === "verifyEmail") {
+    title.innerText = "Verifying email...";
 
-  <style>
-    body {
-      margin: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #0f172a, #1e293b);
-      color: white;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+    try {
+      await applyActionCode(auth, oobCode);
+      setStatus("success", "Email verified successfully!");
+
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 2000);
+
+    } catch (e) {
+      setStatus("error", e.message);
     }
+  }
 
-    .card {
-      background: rgba(255,255,255,0.05);
-      backdrop-filter: blur(20px);
-      border-radius: 20px;
-      padding: 40px;
-      width: 90%;
-      max-width: 400px;
-      text-align: center;
-      box-shadow: 0 0 40px rgba(0,0,0,0.5);
-    }
+  // RECOVER EMAIL
+  if (mode === "recoverEmail") {
+    title.innerText = "Recover Email";
 
-    h1 {
-      margin-bottom: 10px;
-    }
+    try {
+      const info = await checkActionCode(auth, oobCode);
+      await applyActionCode(auth, oobCode);
 
-    p {
-      opacity: 0.8;
-    }
+      setStatus("success", "Email restored: " + info.data.email);
 
-    input {
-      width: 100%;
-      padding: 12px;
-      border-radius: 10px;
-      border: none;
-      margin-top: 15px;
-      font-size: 16px;
+    } catch (e) {
+      setStatus("error", e.message);
     }
+  }
+}
 
-    button {
-      width: 100%;
-      padding: 12px;
-      border-radius: 10px;
-      border: none;
-      margin-top: 15px;
-      font-size: 16px;
-      background: #3b82f6;
-      color: white;
-      cursor: pointer;
-      transition: 0.2s;
-    }
+window.onload = init;
+</script>
 
-    button:hover {
-      background: #2563eb;
-    }
+<style>
+body {
+  margin:0;
+  font-family:system-ui;
+  background: radial-gradient(circle at top, #1e293b, #020617);
+  color:white;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:100vh;
+}
 
-    #form {
-      display: none;
-    }
-  </style>
+.card {
+  width:400px;
+  padding:30px;
+  border-radius:20px;
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(25px);
+  box-shadow:0 0 50px rgba(0,0,0,0.6);
+}
+
+h1 {margin:0 0 10px;}
+p {opacity:0.7;}
+
+input {
+  width:100%;
+  padding:12px;
+  margin-top:10px;
+  border-radius:10px;
+  border:none;
+}
+
+button {
+  width:100%;
+  padding:12px;
+  margin-top:10px;
+  border:none;
+  border-radius:10px;
+  background:#3b82f6;
+  color:white;
+  cursor:pointer;
+}
+
+button:disabled {
+  opacity:0.5;
+  cursor:not-allowed;
+}
+
+.status {
+  margin-top:15px;
+  padding:10px;
+  border-radius:10px;
+}
+
+.status.success {background:#065f46;}
+.status.error {background:#7f1d1d;}
+
+meter {
+  width:100%;
+  margin-top:10px;
+}
+
+#form {display:none;}
+</style>
 </head>
 
 <body>
-  <div class="card">
-    <h1 id="title">Loading...</h1>
-    <p id="desc">Please wait...</p>
+<div class="card">
+  <h1 id="title">Loading...</h1>
+  <p id="desc">Please wait...</p>
 
-    <div id="form">
-      <input type="password" id="password" placeholder="New password">
-      <button id="btn">Reset Password</button>
-    </div>
+  <div id="form">
+    <input type="password" id="password" placeholder="New password">
+    <input type="password" id="password2" placeholder="Confirm password">
+    <button id="toggle">Show / Hide</button>
+    <meter id="strength" min="0" max="4"></meter>
+    <button id="btn">Reset Password</button>
   </div>
+
+  <div id="status" class="status"></div>
+</div>
 </body>
 </html>
