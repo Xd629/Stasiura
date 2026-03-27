@@ -2,13 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Secure Account</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Action</title>
 
-<!-- reCAPTCHA -->
 <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-<!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -18,135 +16,106 @@ import {
   applyActionCode
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-const firebaseConfig = {
+const app = initializeApp({
   apiKey: "AIzaSyBDstk_UwkFTGqQyiehAXjMvnElxclxaII",
-  authDomain: "rbxmhub.firebaseapp.com",
-};
+  authDomain: "rbxmhub.firebaseapp.com"
+});
 
-const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// params
-const params = new URLSearchParams(location.search);
-const mode = params.get("mode");
-const oobCode = params.get("oobCode");
-
-// UI (dopiero po DOM load!)
-let title, desc, form, btn, pass, pass2, status, loader, confirmBtn;
+let pass, pass2, status, confirmBtn;
 
 function setStatus(text, ok=false){
   status.innerText = text;
-  status.className = ok ? "status ok" : "status";
+  status.className = ok ? "status ok" : "status error";
 }
 
-function firebaseError(code){
-  switch(code){
-    case "auth/expired-action-code": return "Link expired.";
-    case "auth/invalid-action-code": return "Invalid or already used link.";
-    default: return "Something went wrong.";
+function shake(el){
+  el.classList.add("shake");
+  setTimeout(()=>el.classList.remove("shake"),400);
+}
+
+function cooldown(btn){
+  btn.disabled = true;
+  setTimeout(()=>btn.disabled=false,2000);
+}
+
+function detectCaps(e){
+  if(e.getModifierState("CapsLock")){
+    setStatus("Caps Lock is ON");
   }
 }
 
 function redirect(){
+  document.body.classList.add("fade-out");
   setTimeout(()=>{
     window.location.href = "https://rbxmhub.vercel.app";
-  },1500);
+  },1200);
 }
 
 async function init(){
 
-  // przypisanie elementów (FIX!)
-  title = document.getElementById("title");
-  desc = document.getElementById("desc");
-  form = document.getElementById("form");
-  btn = document.getElementById("btn");
   pass = document.getElementById("pass");
   pass2 = document.getElementById("pass2");
   status = document.getElementById("status");
-  loader = document.getElementById("loader");
   confirmBtn = document.getElementById("confirmBtn");
 
-  if(!mode || !oobCode){
-    title.innerText = "Invalid link";
-    desc.innerText = "Missing parameters.";
-    loader.style.display = "none";
-    return;
-  }
+  const params = new URLSearchParams(location.search);
+  const mode = params.get("mode");
+  const oobCode = params.get("oobCode");
 
-  loader.style.display = "none";
-  form.style.display = "block";
+  document.getElementById("loader").style.display="none";
+  document.getElementById("form").style.display="block";
 
-  // RESET PASSWORD
-  if(mode === "resetPassword"){
-    title.innerText = "Reset Password";
-    desc.innerText = "Create a new password";
+  confirmBtn.onclick = async () => {
 
-    confirmBtn.onclick = async () => {
+    const captcha = grecaptcha.getResponse();
+    if(!captcha){
+      setStatus("Confirm reCAPTCHA");
+      shake(confirmBtn);
+      return;
+    }
 
-      const captcha = grecaptcha.getResponse();
-      if(!captcha){
-        setStatus("Confirm reCAPTCHA first.");
-        return;
-      }
+    if(pass.value !== pass2.value){
+      setStatus("Passwords do not match");
+      shake(pass2);
+      grecaptcha.reset();
+      return;
+    }
 
-      if(pass.value !== pass2.value){
-        setStatus("Passwords do not match.");
-        return;
-      }
+    if(pass.value.toLowerCase().includes("rbxm")){
+      setStatus("Password too weak");
+      shake(pass);
+      return;
+    }
 
-      confirmBtn.disabled = true;
-      confirmBtn.innerText = "Verifying...";
+    confirmBtn.innerText="Verifying...";
+    confirmBtn.disabled=true;
 
-      try{
+    try{
+
+      if(mode==="resetPassword"){
         await verifyPasswordResetCode(auth, oobCode);
         await confirmPasswordReset(auth, oobCode, pass.value);
-
-        setStatus("Password updated!", true);
-        redirect();
-
-      }catch(e){
-        setStatus(firebaseError(e.code));
       }
 
-      confirmBtn.disabled = false;
-      confirmBtn.innerText = "Confirm";
-    };
-  }
-
-  // VERIFY EMAIL
-  if(mode === "verifyEmail"){
-    title.innerText = "Verify Email";
-    desc.innerText = "Click confirm to verify";
-
-    // ukryj pola hasła
-    pass.style.display = "none";
-    pass2.style.display = "none";
-
-    confirmBtn.onclick = async () => {
-
-      const captcha = grecaptcha.getResponse();
-      if(!captcha){
-        setStatus("Confirm reCAPTCHA first.");
-        return;
-      }
-
-      confirmBtn.disabled = true;
-      confirmBtn.innerText = "Verifying...";
-
-      try{
+      if(mode==="verifyEmail"){
         await applyActionCode(auth, oobCode);
-
-        setStatus("Email verified!", true);
-        redirect();
-
-      }catch(e){
-        setStatus(firebaseError(e.code));
       }
 
-      confirmBtn.disabled = false;
-      confirmBtn.innerText = "Confirm";
-    };
-  }
+      setStatus("Success!",true);
+      redirect();
+
+    }catch(e){
+      setStatus("Invalid or expired link");
+      grecaptcha.reset();
+      cooldown(confirmBtn);
+    }
+
+    confirmBtn.innerText="Confirm";
+  };
+
+  pass.addEventListener("keyup", detectCaps);
 }
 
 window.onload = init;
@@ -155,59 +124,85 @@ window.onload = init;
 <style>
 body{
   margin:0;
-  font-family:Arial;
+  font-family:Inter;
   background:#0b1220;
   color:white;
   display:flex;
   align-items:center;
   justify-content:center;
   height:100vh;
+  overflow:hidden;
 }
 
 .card{
-  width:360px;
+  width:380px;
   padding:25px;
   border-radius:16px;
   background:rgba(255,255,255,0.05);
+  animation:fadeIn .6s;
 }
 
 input{
   width:100%;
-  padding:10px;
-  margin-top:10px;
+  padding:14px;
+  margin-top:12px;
+  border-radius:10px;
   border:none;
-  border-radius:8px;
   background:#1e293b;
   color:white;
+  font-size:16px;
 }
 
 button{
   width:100%;
   margin-top:12px;
-  padding:12px;
+  padding:14px;
   border:none;
-  border-radius:8px;
+  border-radius:10px;
   background:#3b82f6;
   color:white;
-  cursor:pointer;
+  font-size:16px;
 }
 
-button:disabled{
-  opacity:.5;
+/* STICKY MOBILE */
+@media(max-width:500px){
+  button{
+    position:sticky;
+    bottom:10px;
+  }
 }
 
-.loader{
-  width:40px;
-  height:40px;
-  border:4px solid rgba(255,255,255,0.2);
-  border-top:4px solid #3b82f6;
-  border-radius:50%;
-  animation:spin 1s linear infinite;
-  margin:20px auto;
+/* LOADER BAR */
+.progress{
+  height:3px;
+  background:#3b82f6;
+  animation:progress 2s infinite;
 }
 
-@keyframes spin{
-  to{transform:rotate(360deg)}
+@keyframes progress{
+  0%{width:0}
+  100%{width:100%}
+}
+
+/* FADE */
+@keyframes fadeIn{
+  from{opacity:0; transform:translateY(20px)}
+}
+
+.fade-out{
+  opacity:0;
+  transition:1s;
+}
+
+/* SHAKE */
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-5px)}
+  75%{transform:translateX(5px)}
+}
+
+.shake{
+  animation:shake .3s;
 }
 
 .status{
@@ -215,12 +210,21 @@ button:disabled{
   font-size:13px;
 }
 
-.status.ok{
-  color:#22c55e;
+.status.ok{color:#22c55e}
+.status.error{color:#ef4444}
+
+/* MOBILE INPUTS */
+@media(max-width:420px){
+  .card{width:95%}
+  input{font-size:18px}
 }
 
-.g-recaptcha{
-  margin-top:12px;
+/* FOOTER */
+.footer{
+  margin-top:15px;
+  font-size:11px;
+  opacity:.5;
+  text-align:center;
 }
 </style>
 </head>
@@ -228,21 +232,25 @@ button:disabled{
 <body>
 
 <div class="card">
-  <h2 id="title">Loading</h2>
-  <p id="desc">Please wait...</p>
+  <div class="progress"></div>
 
-  <div id="loader" class="loader"></div>
+  <h2>Secure Action</h2>
+
+  <div id="loader">Loading...</div>
 
   <div id="form" style="display:none;">
-    <input type="password" id="pass" placeholder="New password">
-    <input type="password" id="pass2" placeholder="Confirm password">
+    <input id="pass" type="password" placeholder="New password">
+    <input id="pass2" type="password" placeholder="Confirm password">
 
     <div class="g-recaptcha"
       data-sitekey="6LezbJksAAAAABiiwZm1shS508Qs30lQ6QeE7VFg"></div>
 
     <button id="confirmBtn">Confirm</button>
-
     <div id="status" class="status"></div>
+  </div>
+
+  <div class="footer">
+    🔒 Powered by Firebase Authentication
   </div>
 </div>
 
