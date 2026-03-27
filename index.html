@@ -5,6 +5,10 @@
 <title>Secure Account Action</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- reCAPTCHA -->
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+<!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -15,31 +19,20 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBDstk_UwkFTGQYiehAXjMvnElxclxaII",
+  apiKey: "AIzaSyBDstk_UwkFTGqQyiehAXjMvnElxclxaII",
   authDomain: "rbxmhub.firebaseapp.com",
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// UI
-const title = document.getElementById("title");
-const desc = document.getElementById("desc");
-const form = document.getElementById("form");
-const btn = document.getElementById("btn");
-const pass = document.getElementById("pass");
-const pass2 = document.getElementById("pass2");
-const status = document.getElementById("status");
-const loader = document.getElementById("loader");
-const recaptchaBox = document.getElementById("recaptchaBox");
-
 // params
 const params = new URLSearchParams(location.search);
 const mode = params.get("mode");
 const oobCode = params.get("oobCode");
 
-// IP tracking
-let userIP = null;
+// UI (dopiero po DOM load!)
+let title, desc, form, btn, pass, pass2, status, loader, confirmBtn;
 
 function setStatus(text, ok=false){
   status.innerText = text;
@@ -48,128 +41,111 @@ function setStatus(text, ok=false){
 
 function firebaseError(code){
   switch(code){
-    case "auth/expired-action-code": return "Link has expired.";
+    case "auth/expired-action-code": return "Link expired.";
     case "auth/invalid-action-code": return "Invalid or already used link.";
-    case "auth/user-disabled": return "Account is disabled.";
-    default: return "Something went wrong. Try again.";
+    default: return "Something went wrong.";
   }
 }
 
-// get IP
-async function getIP(){
-  try {
-    const res = await fetch("https://api.ipify.org?format=json");
-    const data = await res.json();
-    return data.ip;
-  } catch {
-    return "unknown";
-  }
-}
-
-// attempts per IP
-function getAttempts(ip){
-  return Number(localStorage.getItem("attempts_" + ip) || 0);
-}
-
-function addAttempt(ip){
-  const v = getAttempts(ip) + 1;
-  localStorage.setItem("attempts_" + ip, v);
-  return v;
-}
-
-function showScreen(type){
-  form.style.display = "none";
-  loader.style.display = "none";
-
-  if(type === "expired"){
-    title.innerText = "Link expired";
-    desc.innerText = "This action link is no longer valid.";
-  }
-
-  if(type === "invalid"){
-    title.innerText = "Invalid link";
-    desc.innerText = "This link is broken or already used.";
-  }
-
-  if(type === "success"){
-    title.innerText = "Success";
-    desc.innerText = "Your account has been updated.";
-  }
+function redirect(){
+  setTimeout(()=>{
+    window.location.href = "https://rbxmhub.vercel.app";
+  },1500);
 }
 
 async function init(){
-  userIP = await getIP();
+
+  // przypisanie elementów (FIX!)
+  title = document.getElementById("title");
+  desc = document.getElementById("desc");
+  form = document.getElementById("form");
+  btn = document.getElementById("btn");
+  pass = document.getElementById("pass");
+  pass2 = document.getElementById("pass2");
+  status = document.getElementById("status");
+  loader = document.getElementById("loader");
+  confirmBtn = document.getElementById("confirmBtn");
 
   if(!mode || !oobCode){
-    showScreen("invalid");
+    title.innerText = "Invalid link";
+    desc.innerText = "Missing parameters.";
+    loader.style.display = "none";
     return;
   }
 
-  // LIMIT PRÓB (per IP)
-  const attempts = getAttempts(userIP);
-  if(attempts >= 3){
-    showScreen("expired");
-    setStatus("Too many attempts. Try again later.");
-    return;
-  }
+  loader.style.display = "none";
+  form.style.display = "block";
 
+  // RESET PASSWORD
   if(mode === "resetPassword"){
     title.innerText = "Reset Password";
-    desc.innerText = "Create a new secure password";
+    desc.innerText = "Create a new password";
 
-    try{
-      await verifyPasswordResetCode(auth, oobCode);
-      loader.style.display = "none";
-      form.style.display = "block";
+    confirmBtn.onclick = async () => {
 
-      btn.onclick = async () => {
+      const captcha = grecaptcha.getResponse();
+      if(!captcha){
+        setStatus("Confirm reCAPTCHA first.");
+        return;
+      }
 
-        const recaptcha = grecaptcha.getResponse();
-        if(!recaptcha){
-          setStatus("Confirm reCAPTCHA first.");
-          return;
-        }
+      if(pass.value !== pass2.value){
+        setStatus("Passwords do not match.");
+        return;
+      }
 
-        if(pass.value !== pass2.value){
-          setStatus("Passwords do not match");
-          return;
-        }
+      confirmBtn.disabled = true;
+      confirmBtn.innerText = "Verifying...";
 
-        addAttempt(userIP);
+      try{
+        await verifyPasswordResetCode(auth, oobCode);
+        await confirmPasswordReset(auth, oobCode, pass.value);
 
-        btn.disabled = true;
-        btn.innerText = "Verifying...";
+        setStatus("Password updated!", true);
+        redirect();
 
-        try{
-          await confirmPasswordReset(auth, oobCode, pass.value);
-          showScreen("success");
-          setStatus("Password updated successfully", true);
-          grecaptcha.reset();
-        }catch(e){
-          setStatus(firebaseError(e.code));
-        }
+      }catch(e){
+        setStatus(firebaseError(e.code));
+      }
 
-        btn.disabled = false;
-        btn.innerText = "Update Password";
-      };
-
-    }catch(e){
-      showScreen("invalid");
-      setStatus(firebaseError(e.code));
-    }
+      confirmBtn.disabled = false;
+      confirmBtn.innerText = "Confirm";
+    };
   }
 
+  // VERIFY EMAIL
   if(mode === "verifyEmail"){
-    title.innerText = "Verifying email";
-    desc.innerText = "Please wait...";
+    title.innerText = "Verify Email";
+    desc.innerText = "Click confirm to verify";
 
-    try{
-      await applyActionCode(auth, oobCode);
-      showScreen("success");
-    }catch(e){
-      showScreen("invalid");
-      setStatus(firebaseError(e.code));
-    }
+    // ukryj pola hasła
+    pass.style.display = "none";
+    pass2.style.display = "none";
+
+    confirmBtn.onclick = async () => {
+
+      const captcha = grecaptcha.getResponse();
+      if(!captcha){
+        setStatus("Confirm reCAPTCHA first.");
+        return;
+      }
+
+      confirmBtn.disabled = true;
+      confirmBtn.innerText = "Verifying...";
+
+      try{
+        await applyActionCode(auth, oobCode);
+
+        setStatus("Email verified!", true);
+        redirect();
+
+      }catch(e){
+        setStatus(firebaseError(e.code));
+      }
+
+      confirmBtn.disabled = false;
+      confirmBtn.innerText = "Confirm";
+    };
   }
 }
 
@@ -177,36 +153,31 @@ window.onload = init;
 </script>
 
 <style>
-*{box-sizing:border-box}
 body{
   margin:0;
-  font-family:Inter,sans-serif;
-  height:100vh;
+  font-family:Arial;
+  background:#0b1220;
+  color:white;
   display:flex;
   align-items:center;
   justify-content:center;
-  background:#0b1220;
-  color:white;
+  height:100vh;
 }
 
 .card{
-  width:380px;
-  padding:30px;
-  border-radius:18px;
+  width:360px;
+  padding:25px;
+  border-radius:16px;
   background:rgba(255,255,255,0.05);
-  backdrop-filter:blur(20px);
 }
-
-h1{margin:0;font-size:24px}
-p{opacity:.6}
 
 input{
   width:100%;
-  padding:12px;
+  padding:10px;
   margin-top:10px;
   border:none;
-  border-radius:10px;
-  background:rgba(255,255,255,0.08);
+  border-radius:8px;
+  background:#1e293b;
   color:white;
 }
 
@@ -215,22 +186,19 @@ button{
   margin-top:12px;
   padding:12px;
   border:none;
-  border-radius:10px;
+  border-radius:8px;
   background:#3b82f6;
   color:white;
-  font-weight:600;
   cursor:pointer;
 }
 
 button:disabled{
   opacity:.5;
-  cursor:not-allowed;
 }
 
-/* GOOGLE STYLE LOADER */
 .loader{
-  width:48px;
-  height:48px;
+  width:40px;
+  height:40px;
   border:4px solid rgba(255,255,255,0.2);
   border-top:4px solid #3b82f6;
   border-radius:50%;
@@ -243,28 +211,16 @@ button:disabled{
 }
 
 .status{
-  margin-top:12px;
+  margin-top:10px;
   font-size:13px;
 }
 
-.status.ok{color:#22c55e}
+.status.ok{
+  color:#22c55e;
+}
 
-/* reCAPTCHA */
-#recaptchaBox{
+.g-recaptcha{
   margin-top:12px;
-}
-
-/* trust footer */
-.footer{
-  margin-top:15px;
-  font-size:11px;
-  opacity:.5;
-  text-align:center;
-}
-
-/* MOBILE */
-@media(max-width:420px){
-  .card{width:92%}
 }
 </style>
 </head>
@@ -272,7 +228,7 @@ button:disabled{
 <body>
 
 <div class="card">
-  <h1 id="title">Loading</h1>
+  <h2 id="title">Loading</h2>
   <p id="desc">Please wait...</p>
 
   <div id="loader" class="loader"></div>
@@ -281,18 +237,14 @@ button:disabled{
     <input type="password" id="pass" placeholder="New password">
     <input type="password" id="pass2" placeholder="Confirm password">
 
-    <div id="recaptchaBox" class="g-recaptcha"
+    <div class="g-recaptcha"
       data-sitekey="6LezbJksAAAAABiiwZm1shS508Qs30lQ6QeE7VFg"></div>
 
-    <button id="btn">Update Password</button>
-    <div id="status" class="status"></div>
-  </div>
+    <button id="confirmBtn">Confirm</button>
 
-  <div class="footer">
-    Secure Firebase Authentication • Anti-bot protection enabled
+    <div id="status" class="status"></div>
   </div>
 </div>
 
-<script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </body>
 </html>
